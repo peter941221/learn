@@ -3,14 +3,15 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 const metadataTitle = "Next.js Cross-chain Starter";
+const brandedMetadataTitle = `${metadataTitle} | w3-kit`;
 const metadataDescription =
   "A Next.js App Router starter that uses one shared wallet picker for EVM and Solana identities.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://example.com"),
   title: {
-    default: metadataTitle,
-    template: `%s | ${metadataTitle}`,
+    default: brandedMetadataTitle,
+    template: "%s | w3-kit",
   },
   description: metadataDescription,
   applicationName: metadataTitle,
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
     apple: ["/icon.svg"],
   },
   openGraph: {
-    title: metadataTitle,
+    title: brandedMetadataTitle,
     description: metadataDescription,
     url: "/",
     siteName: metadataTitle,
@@ -36,7 +37,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: metadataTitle,
+    title: brandedMetadataTitle,
     description: metadataDescription,
     images: ["/icon.svg"],
   },
