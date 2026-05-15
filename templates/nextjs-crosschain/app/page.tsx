@@ -1,9 +1,11 @@
 "use client";
 
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { ConnectWallet } from "@/components/connect-wallet/ConnectWallet";
+import type { WalletOption } from "@/components/connect-wallet/types";
 
 function shorten(value?: string) {
   if (!value) {
@@ -21,16 +23,104 @@ function StatusPill({ active, label }: { active: boolean; label: string }) {
   return <span className={active ? "status-pill status-pill-active" : "status-pill"}>{label}</span>;
 }
 
+function WalletGlyph({
+  label,
+  background,
+}: {
+  label: string;
+  background: string;
+}) {
+  return (
+    <span
+      style={{ background }}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white"
+    >
+      {label}
+    </span>
+  );
+}
+
+function normalizeWalletId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function adapterInstalled(readyState: WalletReadyState) {
+  return readyState === WalletReadyState.Installed || readyState === WalletReadyState.Loadable;
+}
+
+function adapterInstallUrl(walletId: string) {
+  if (walletId === "phantom") {
+    return "https://phantom.app/";
+  }
+
+  if (walletId === "solflare") {
+    return "https://solflare.com/download/";
+  }
+
+  return undefined;
+}
+
 export default function Home() {
-  const { address, chain, isConnected } = useAccount();
+  const { address, chain, connector: activeConnector, isConnected } = useAccount();
   const { connectors, connect, error, isPending } = useConnect();
   const { disconnect: disconnectEvm } = useDisconnect();
-  const { publicKey, connected: solanaConnected, wallet, disconnect: disconnectSolana } = useWallet();
+  const {
+    publicKey,
+    connected: solanaConnected,
+    wallet,
+    wallets: solanaWallets,
+    disconnect: disconnectSolana,
+    select,
+  } = useWallet();
   const [sessionNote, setSessionNote] = useState("Waiting for both wallets.");
+  const [recentWalletId, setRecentWalletId] = useState<string>();
 
   const injectedConnector = connectors.find((connector) => connector.type === "injected") ?? connectors[0];
   const solanaAddress = publicKey?.toBase58();
   const bothConnected = isConnected && solanaConnected;
+  const connectedWalletCount = Number(isConnected) + Number(solanaConnected);
+  const hasInjectedProvider =
+    typeof window !== "undefined" &&
+    "ethereum" in window &&
+    Boolean((window as Window & { ethereum?: unknown }).ethereum);
+
+  const walletOptions = useMemo<WalletOption[]>(() => {
+    const evmOptions = connectors.map((connector, index) => ({
+      id: `evm:${connector.id}`,
+      name: connector.name,
+      icon: <WalletGlyph label="E" background={index === 0 ? "#2563eb" : "#0f172a"} />,
+      ecosystem: "evm" as const,
+      installed: connector.type === "injected" ? hasInjectedProvider : undefined,
+      installUrl:
+        connector.type === "injected" && !hasInjectedProvider
+          ? "https://metamask.io/download/"
+          : undefined,
+      popular: index === 0,
+    }));
+
+    const solanaOptions = solanaWallets.map(({ adapter, readyState }) => {
+      const walletId = normalizeWalletId(adapter.name);
+      const installed = adapterInstalled(readyState);
+      const fallbackIcon: ReactNode = (
+        <WalletGlyph
+          label={adapter.name.slice(0, 1).toUpperCase()}
+          background={walletId === "phantom" ? "#8b5cf6" : "#f97316"}
+        />
+      );
+
+      return {
+        id: `sol:${walletId}`,
+        name: adapter.name,
+        icon: adapter.icon || fallbackIcon,
+        ecosystem: "solana" as const,
+        installed,
+        installUrl: installed ? undefined : adapterInstallUrl(walletId),
+        popular: walletId === "phantom",
+      };
+    });
+
+    return [...evmOptions, ...solanaOptions];
+  }, [connectors, hasInjectedProvider, solanaWallets]);
 
   const sessionSummary = useMemo(
     () => ({
@@ -43,9 +133,49 @@ export default function Home() {
     [address, bothConnected, chain?.name, solanaAddress],
   );
 
+  useEffect(() => {
+    if (isConnected && activeConnector) {
+      setRecentWalletId(`evm:${activeConnector.id}`);
+    }
+  }, [activeConnector, isConnected]);
+
+  useEffect(() => {
+    if (solanaConnected && wallet?.adapter.name) {
+      setRecentWalletId(`sol:${normalizeWalletId(wallet.adapter.name)}`);
+    }
+  }, [solanaConnected, wallet]);
+
+  const handleWalletConnect = (walletId: string) => {
+    setRecentWalletId(walletId);
+
+    const selectedWallet = walletOptions.find((option) => option.id === walletId);
+    if (selectedWallet?.installed === false && selectedWallet.installUrl) {
+      window.open(selectedWallet.installUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    if (walletId.startsWith("evm:")) {
+      const connector = connectors.find((item) => `evm:${item.id}` === walletId);
+      if (connector) {
+        connect({ connector });
+      }
+      return;
+    }
+
+    const solanaWallet = solanaWallets.find(
+      ({ adapter }) => `sol:${normalizeWalletId(adapter.name)}` === walletId,
+    );
+
+    if (solanaWallet) {
+      select(solanaWallet.adapter.name);
+    }
+  };
+
   const buildSession = () => {
     if (!bothConnected) {
-      setSessionNote("Connect one EVM wallet and one Solana wallet before creating a unified identity view.");
+      setSessionNote(
+        "Use the shared wallet picker to connect one EVM wallet and one Solana wallet before creating a unified identity view.",
+      );
       return;
     }
 
@@ -69,6 +199,31 @@ export default function Home() {
       </section>
 
       <section className="dashboard" aria-label="Cross-chain wallet dashboard">
+        <article className="panel panel-wide">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">Shared wallet picker</p>
+              <h2>One surface for EVM and Solana</h2>
+            </div>
+            <StatusPill active={bothConnected} label={`${connectedWalletCount}/2 connected`} />
+          </div>
+
+          <ConnectWallet
+            wallets={walletOptions}
+            onConnect={handleWalletConnect}
+            recentWalletId={recentWalletId}
+            loading={isPending}
+            className="max-w-none"
+          />
+
+          <p className="session-note">
+            This template routes one flat wallet list into wagmi connectors for EVM and wallet-adapter selection for
+            Solana.
+          </p>
+
+          {error ? <p className="error">{error.message}</p> : null}
+        </article>
+
         <article className="panel">
           <div className="panel-heading">
             <div>
@@ -85,26 +240,18 @@ export default function Home() {
             </div>
             <div>
               <dt>Connector</dt>
-              <dd>{injectedConnector?.name ?? "No injected wallet found"}</dd>
+              <dd>{activeConnector?.name ?? injectedConnector?.name ?? "No injected wallet found"}</dd>
             </div>
           </dl>
 
-          {isConnected ? (
-            <button className="button secondary" type="button" onClick={() => disconnectEvm()}>
-              Disconnect EVM
-            </button>
-          ) : (
-            <button
-              className="button"
-              type="button"
-              disabled={!injectedConnector || isPending}
-              onClick={() => injectedConnector && connect({ connector: injectedConnector })}
-            >
-              {isPending ? "Opening wallet..." : "Connect EVM"}
-            </button>
-          )}
-
-          {error ? <p className="error">{error.message}</p> : null}
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!isConnected}
+            onClick={() => disconnectEvm()}
+          >
+            Disconnect EVM
+          </button>
         </article>
 
         <article className="panel">
@@ -123,18 +270,18 @@ export default function Home() {
             </div>
             <div>
               <dt>Adapter</dt>
-              <dd>{wallet?.adapter.name ?? "Select in wallet modal"}</dd>
+              <dd>{wallet?.adapter.name ?? "Select in shared wallet picker"}</dd>
             </div>
           </dl>
 
-          <div className="wallet-row">
-            <WalletMultiButton />
-            {solanaConnected ? (
-              <button className="button secondary" type="button" onClick={() => disconnectSolana()}>
-                Disconnect
-              </button>
-            ) : null}
-          </div>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!solanaConnected}
+            onClick={() => disconnectSolana()}
+          >
+            Disconnect Solana
+          </button>
         </article>
 
         <article className="panel session-panel">
@@ -158,8 +305,8 @@ export default function Home() {
           <p className="panel-kicker">Example flow</p>
           <h2>Safe first cross-chain interaction</h2>
           <ol>
-            <li>Connect an EVM wallet through wagmi.</li>
-            <li>Connect a Solana wallet through wallet-adapter.</li>
+            <li>Pick an EVM or Solana wallet from the shared `ConnectWallet` registry component.</li>
+            <li>Route EVM choices into wagmi and Solana choices into wallet-adapter selection.</li>
             <li>Show both identities in one client session.</li>
           </ol>
           <p>

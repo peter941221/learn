@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color-scheme: light;
   --background: #f5f7fb;
@@ -113,6 +117,10 @@ h2 {
   gap: 16px;
 }
 
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
 .panel {
   display: flex;
   min-height: 290px;
@@ -192,17 +200,6 @@ dd {
   background: #eef4ff;
 }
 
-.wallet-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.wallet-adapter-button {
-  border-radius: 8px;
-}
-
 .error {
   margin-bottom: 0;
   color: #b42318;
@@ -274,8 +271,7 @@ dd {
     flex-direction: column;
   }
 
-  .button,
-  .wallet-adapter-button {
+  .button {
     width: 100%;
   }
 }

@@ -1,10 +1,8 @@
 "use client";
 
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { clusterApiUrl } from "@solana/web3.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -34,13 +32,11 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
-          <ConnectionProvider endpoint={solanaEndpoint}>
-            <WalletProvider wallets={solanaWallets} autoConnect>
-              <WalletModalProvider>{children}</WalletModalProvider>
-            </WalletProvider>
-          </ConnectionProvider>
-        </RainbowKitProvider>
+        <ConnectionProvider endpoint={solanaEndpoint}>
+          <WalletProvider wallets={solanaWallets} autoConnect>
+            {children}
+          </WalletProvider>
+        </ConnectionProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
